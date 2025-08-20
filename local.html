@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <title>Chat Locale</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+    header {
+      background: #4CAF50;
+      color: white;
+      padding: 1rem;
+      text-align: center;
+    }
+    #chat {
+      flex: 1;
+      padding: 1rem;
+      overflow-y: auto;
+      background: #f1f1f1;
+    }
+    .message {
+      margin-bottom: 0.5rem;
+      padding: 0.5rem;
+      background: white;
+      border-radius: 4px;
+    }
+    .message .author {
+      font-weight: bold;
+    }
+    form {
+      display: flex;
+      border-top: 1px solid #ccc;
+    }
+    form input {
+      flex: 1;
+      padding: 0.75rem;
+      border: none;
+      outline: none;
+    }
+    form button {
+      padding: 0.75rem 1.5rem;
+      border: none;
+      background: #4CAF50;
+      color: white;
+      cursor: pointer;
+    }
+    form button:disabled {
+      background: #888;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <h1>Chat Locale</h1>
+  </header>
+
+  <div id="chat"></div>
+
+  <form id="msgForm">
+    <input id="msgInput" type="text" placeholder="Scrivi un messaggio..." autocomplete="off" />
+    <button type="submit" disabled>Invia</button>
+  </form>
+
+  <script>
+    const chatEl = document.getElementById('chat');
+    const form = document.getElementById('msgForm');
+    const input = document.getElementById('msgInput');
+    const button = form.querySelector('button');
+
+    // Chiedi nickname e salva in localStorage
+    let nick = localStorage.getItem('chat_nick');
+    if (!nick) {
+      nick = prompt('Inserisci il tuo nickname:') || 'Anonimo';
+      localStorage.setItem('chat_nick', nick);
+    }
+
+    // Percorso del file JSON
+    const MESSAGES_JSON = 'messages.json';
+
+    // Carica messaggi e aggiorna la UI
+    async function loadMessages() {
+      try {
+        const res = await fetch(MESSAGES_JSON);
+        if (!res.ok) return;
+        const msgs = await res.json();
+        chatEl.innerHTML = msgs
+          .map(m => `
+            <div class="message">
+              <div class="author">${m.author}</div>
+              <div class="text">${m.text}</div>
+              <div class="time">${new Date(m.time).toLocaleTimeString()}</div>
+            </div>
+          `).join('');
+        chatEl.scrollTop = chatEl.scrollHeight;
+      } catch (err) {
+        console.error('Errore caricamento:', err);
+      }
+    }
+
+    // Invia nuovo messaggio: GET → append → PUT
+    async function sendMessage(text) {
+      try {
+        // 1. Prendi gli esistenti
+        const res = await fetch(MESSAGES_JSON);
+        let msgs = [];
+        if (res.ok) msgs = await res.json();
+
+        // 2. Aggiungi il nuovo
+        msgs.push({
+          author: nick,
+          text: text,
+          time: Date.now()
+        });
+
+        // 3. Salva con PUT
+        await fetch(MESSAGES_JSON, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(msgs, null, 2)
+        });
+
+        // 4. Ricarica la chat
+        await loadMessages();
+      } catch (err) {
+        console.error('Errore invio:', err);
+      }
+    }
+
+    // Polling ogni 2 secondi
+    setInterval(loadMessages, 2000);
+    loadMessages();
+
+    // Gestione form
+    input.addEventListener('input', () => {
+      button.disabled = input.value.trim().length === 0;
+    });
+
+    form.addEventListener('submit', async e => {
+      e.preventDefault();
+      const text = input.value.trim();
+      if (!text) return;
+      button.disabled = true;
+      await sendMessage(text);
+      input.value = '';
+      input.focus();
+      button.disabled = false;
+    });
+  </script>
+
+</body>
+</html>
