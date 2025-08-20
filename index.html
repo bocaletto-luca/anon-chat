@@ -1,100 +1,643 @@
-# AnonChat
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <!-- Release v1.1.0 – Front-end WebApp with JSON storage -->
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-A front-end–only, anonymous multi-user chat application offering real-time public and private conversations. User identities are represented by a unique ID, nickname, and password, with all chat data stored in JSON files on the server. No backend framework is required—just a static file server capable of handling HTTP GET, PUT, and HEAD requests for `.json` files.
+  <!-- SEO Meta Tags -->
+  <title>AnonChat – Anonymous Multi-User Real-Time Chat</title>
+  <meta name="description" content="AnonChat is a front-end only anonymous chat app with public & private rooms stored in JSON.">
+  <meta name="keywords" content="anonymous chat, multi-user, public chat, private chat, JSON storage, PWA, i18n">
+  <meta name="author" content="Luca Bocaletto">
+  <meta name="version" content="1.1.0">
+  <link rel="canonical" href="https://github.com/Bocaletto-Luca/anon-chat">
 
----
+  <!-- Open Graph -->
+  <meta property="og:title" content="AnonChat – Anonymous Multi-User Real-Time Chat">
+  <meta property="og:description" content="Join public rooms or launch private conversations in this front-end PWA chat.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://github.com/Bocaletto-Luca/anon-chat">
+  <meta property="og:image" content="https://raw.githubusercontent.com/Bocaletto-Luca/anon-chat/main/og-image.png">
 
-## Features
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="AnonChat">
+  <meta name="twitter:description" content="Anonymous chat with public & private rooms. PWA & offline support.">
 
-- Anonymous registration and login (ID, nickname, password)  
-- Global public chat room  
-- One-on-one private chats with online users  
-- Real-time message updates via lightweight polling  
-- Automatic creation of required JSON storage files  
-- Responsive, modern UI optimized for desktop and mobile  
-- SEO-friendly meta tags and Open Graph/Twitter Card integration  
+  <!-- Favicon -->
+  <link rel="icon" href="https://github.githubassets.com/favicons/favicon.svg" type="image/svg+xml">
 
----
+  <!-- Bcrypt.js for client-side password hashing -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/bcryptjs/2.4.3/bcrypt.min.js" integrity="sha512-Yb1L+F6UkRWD1A8xow2upPPxPPBG3Wxv+7/ZVX+6QBYZtEPp06oWa0kZt4fx29oLMMzcMZPB832QU7V4ZpuVbw==" crossorigin="anonymous"></script>
 
-## File Structure
+  <style>
+    /* CSS Variables for Day/Night Themes */
+    :root {
+      --bg-color: #f5f7fa; --fg-color: #333;
+      --primary: #5c6bc0; --primary-dark: #3949ab;
+      --panel-bg: #ffffff; --border: #e0e0e0;
+      --input-bg: #fafbfc; --msg-bg: #f9f9fb;
+    }
+    .dark-theme {
+      --bg-color: #2c2f33; --fg-color: #ddd;
+      --primary: #7289da; --primary-dark: #5b6eae;
+      --panel-bg: #23272a; --border: #444;
+      --input-bg: #2f3136; --msg-bg: #36393f;
+    }
 
-```text
-anon-chat/
-├── index.html         # Single-page application (HTML, CSS, JS)
-├── users.json         # Registered user data
-├── global.json        # Public chat message history
-├── online.json        # Online user presence list
-└── convs_<userId>.json# Per-user private conversation histories
-```
+    /* Reset & Base */
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body, html { height:100%; font-family:'Segoe UI',sans-serif; background:var(--bg-color); color:var(--fg-color); }
+    a { color:var(--primary); text-decoration:none; }
+    a:hover { text-decoration:underline; }
+    button { cursor:pointer; }
 
----
+    /* Utility */
+    .hidden { display:none; }
+    .flex { display:flex; }
+    .col { flex-direction:column; }
 
-## Setup
+    /* Authentication Screen */
+    #auth-container {
+      display:flex; flex-direction:column; align-items:center; justify-content:center;
+      height:100%; background:var(--panel-bg);
+    }
+    #auth-container h1 { margin-bottom:1rem; font-size:2rem; }
+    #auth-container form {
+      background:var(--input-bg); padding:1.5rem; margin:0.5rem; border-radius:8px;
+      width:320px; border:1px solid var(--border);
+    }
+    #auth-container label { display:block; margin-top:0.75rem; font-size:0.9rem; }
+    #auth-container input {
+      width:100%; padding:0.5rem; margin-top:0.25rem; border:1px solid var(--border); border-radius:4px;
+      background:var(--panel-bg); color:var(--fg-color);
+    }
+    #auth-container button {
+      width:100%; margin-top:1rem; padding:0.6rem; background:var(--primary);
+      border:none; color:#fff; border-radius:4px; font-weight:bold; font-size:1rem;
+    }
+    #lang-select { margin-top:0.5rem; }
 
-1. Place the entire `anon-chat` directory on any static file server that supports:
-   - HTTP `GET` for reading JSON  
-   - HTTP `PUT` for writing JSON  
-   - HTTP `HEAD` for existence checks  
+    /* Chat Screen */
+    #chat-container { display:flex; flex-direction:column; height:100%; }
+    #chat-container header {
+      background:var(--primary); color:#fff; padding:0.75rem 1.5rem;
+      display:flex; justify-content:space-between; align-items:center;
+    }
+    #chat-container header .controls { display:flex; gap:0.5rem; }
+    #chat-container header button {
+      background:var(--primary-dark); border:none; color:#fff;
+      padding:0.4rem 0.8rem; border-radius:4px;
+    }
 
-2. Ensure write permissions are granted on the directory so that JSON files can be created and updated at runtime.
+    .main { display:flex; flex:1; overflow:hidden; }
 
-3. Access `index.html` through the server URL (e.g., `https://example.com/anon-chat/index.html`).
+    /* Online Users */
+    #users-list {
+      width:220px; background:var(--panel-bg); border-right:1px solid var(--border);
+      padding:1rem; overflow-y:auto;
+    }
+    #users-list h2 { font-size:1.1rem; margin-bottom:0.5rem; }
+    #users-list ul { list-style:none; }
+    #users-list li {
+      padding:0.5rem; margin-bottom:0.25rem; border-radius:4px;
+      transition:background 0.2s; cursor:pointer;
+    }
+    #users-list li:hover { background:var(--input-bg); }
 
----
+    /* Global Chat */
+    #global-chat {
+      flex:1; display:flex; flex-direction:column; background:var(--input-bg);
+    }
+    #global-chat .messages {
+      flex:1; padding:1rem; overflow-y:auto; position:relative;
+    }
+    #global-chat .msg {
+      margin-bottom:0.75rem; line-height:1.4; background:var(--msg-bg); padding:0.5rem; border-radius:4px;
+    }
+    #global-chat .meta {
+      font-size:0.75rem; color:var(--fg-color);
+    }
+    #global-chat #load-more {
+      position:absolute; top:0.5rem; left:50%; transform:translateX(-50%);
+      background:var(--primary); color:#fff; border:none; padding:0.3rem 0.6rem; border-radius:4px;
+    }
+    #global-chat form {
+      display:flex; border-top:1px solid var(--border); background:var(--panel-bg); padding:0.5rem;
+    }
+    #global-chat input {
+      flex:1; padding:0.5rem; border:1px solid var(--border); border-radius:4px;
+      background:var(--panel-bg); color:var(--fg-color);
+    }
+    #global-chat button {
+      margin-left:0.5rem; padding:0.5rem 1rem; background:var(--primary);
+      border:none; color:#fff; border-radius:4px;
+    }
 
-## Usage
+    /* Private Chats */
+    #private-chats {
+      width:300px; background:var(--panel-bg); border-left:1px solid var(--border);
+      padding:1rem; overflow-y:auto;
+    }
+    .pm-window {
+      border:1px solid var(--border); border-radius:6px; margin-bottom:1rem;
+      display:flex; flex-direction:column;
+    }
+    .pm-window header {
+      background:var(--input-bg); padding:0.5rem 1rem; font-size:0.9rem;
+      border-bottom:1px solid var(--border);
+    }
+    .pm-window .messages {
+      flex:1; max-height:200px; padding:0.5rem 1rem; overflow-y:auto;
+      background:var(--msg-bg);
+    }
+    .pm-window .msg {
+      margin-bottom:0.6rem; line-height:1.3;
+    }
+    .pm-window form {
+      display:flex; border-top:1px solid var(--border); padding:0.5rem 1rem;
+      background:var(--panel-bg);
+    }
+    .pm-window input {
+      flex:1; padding:0.4rem; border:1px solid var(--border); border-radius:4px;
+      background:var(--panel-bg); color:var(--fg-color);
+    }
+    .pm-window button {
+      margin-left:0.5rem; padding:0.4rem 0.8rem; background:var(--primary);
+      border:none; color:#fff; border-radius:4px;
+    }
 
-1. **Register**  
-   - Enter a unique nickname and password  
-   - A new user record is appended to `users.json`
+    /* Footer */
+    footer {
+      text-align:center; padding:0.75rem 0; background:var(--input-bg);
+      font-size:0.85rem;
+    }
+  </style>
+</head>
 
-2. **Login**  
-   - Authenticate with nickname and password  
-   - User ID is stored in `localStorage`  
-   - User appears in `online.json`
+<body>
 
-3. **Global Chat**  
-   - Messages posted to `global.json` via PUT  
-   - Polling interval refreshes public chat view
+  <!-- Authentication Screen -->
+  <div id="auth-container">
+    <h1 data-i18n="title">Welcome to AnonChat</h1>
 
-4. **Private Chat**  
-   - Click an online user to open a private chat window  
-   - Conversation files `convs_<yourId>.json` and `convs_<otherId>.json` are initialized if missing  
-   - Private messages are stored in both users’ conversation files
+    <select id="lang-select">
+      <option value="en">English</option>
+      <option value="it">Italiano</option>
+    </select>
 
----
+    <form id="register-form">
+      <label data-i18n="label_nick" for="reg-nick">Choose a Nickname</label>
+      <input type="text" id="reg-nick" required />
+      <label data-i18n="label_pass" for="reg-pass">Enter a Password</label>
+      <input type="password" id="reg-pass" required />
+      <button type="submit" data-i18n="btn_register">Register</button>
+    </form>
 
-## Configuration
+    <form id="login-form">
+      <label data-i18n="label_nick" for="log-nick">Your Nickname</label>
+      <input type="text" id="log-nick" required />
+      <label data-i18n="label_pass" for="log-pass">Your Password</label>
+      <input type="password" id="log-pass" required />
+      <button type="submit" data-i18n="btn_login">Login</button>
+    </form>
+  </div>
 
-- **Polling Intervals**  
-  - Global chat refresh: 1.5 s  
-  - Online list refresh: 2 s  
-  - Private chat refresh: 1 s  
+  <!-- Chat Screen -->
+  <div id="chat-container" class="hidden">
+    <header>
+      <div><span data-i18n="logged_in">Logged in as</span> <strong id="nick-display"></strong></div>
+      <div class="controls">
+        <button id="theme-toggle" data-i18n="btn_theme">Toggle Theme</button>
+        <button id="logout-btn" data-i18n="btn_logout">Logout</button>
+      </div>
+    </header>
 
-- **JSON Initialization**  
-  - `users.json`: `{ "users": [] }`  
-  - `global.json`: `{ "messages": [] }`  
-  - `online.json`: `{ "online": [] }`  
-  - `convs_<userId>.json`: `{ "privateChats": {} }`  
+    <div class="main">
 
-- **UUID Generation**  
-  - Version 4 UUIDs generated in-browser for user IDs and message IDs
+      <!-- Online Users -->
+      <aside id="users-list">
+        <h2 data-i18n="online_users">Online Users</h2>
+        <ul id="online-ul"></ul>
+      </aside>
 
----
+      <!-- Global Chat -->
+      <section id="global-chat">
+        <button id="load-more" class="hidden" data-i18n="btn_load_more">Load More</button>
+        <div class="messages" id="global-messages"></div>
+        <form id="global-form">
+          <input type="text" id="global-input" placeholder="" data-i18n-placeholder="ph_public_msg" required />
+          <button type="submit" data-i18n="btn_send">Send</button>
+        </form>
+      </section>
 
-## Meta & SEO
+      <!-- Private Chats -->
+      <aside id="private-chats"></aside>
 
-- `<title>`, `<meta name="description">`, and `<meta name="keywords">` for search engines  
-- Open Graph and Twitter Card tags for rich social sharing  
-- Canonical link to the GitHub repository:  
-  ```
-  https://github.com/Bocaletto-Luca/anon-chat
-  ```
+    </div>
+  </div>
 
----
+  <!-- Footer -->
+  <footer>
+    © 2025 Luca Bocaletto — 
+    <a href="https://github.com/Bocaletto-Luca/anon-chat" target="_blank" rel="noopener">
+      Repo: Bocaletto-Luca/anon-chat
+    </a>
+  </footer>
 
-## License
 
-This project is released under the GPL v3 License.  
+  <script>
+  // ------------------------
+  // Internationalization
+  // ------------------------
+  const translations = {
+    en: {
+      title: "Welcome to AnonChat",
+      label_nick: "Nickname",
+      label_pass: "Password",
+      btn_register: "Register",
+      btn_login: "Login",
+      logged_in: "Logged in as",
+      btn_logout: "Logout",
+      online_users: "Online Users",
+      ph_public_msg: "Type a public message...",
+      btn_send: "Send",
+      btn_load_more: "Load More",
+      btn_theme: "Toggle Theme"
+    },
+    it: {
+      title: "Benvenuto in AnonChat",
+      label_nick: "Nickname",
+      label_pass: "Password",
+      btn_register: "Registrati",
+      btn_login: "Accedi",
+      logged_in: "Connesso come",
+      btn_logout: "Esci",
+      online_users: "Utenti Online",
+      ph_public_msg: "Scrivi un messaggio pubblico...",
+      btn_send: "Invia",
+      btn_load_more: "Carica altro",
+      btn_theme: "Tema Giorno/Notte"
+    }
+  };
 
-© 2025 Luca Bocaletto
+  function setLanguage(lang) {
+    document.documentElement.lang = lang;
+    document.querySelectorAll("[data-i18n]").forEach(el => {
+      const key = el.getAttribute("data-i18n");
+      el.textContent = translations[lang][key] || el.textContent;
+    });
+    document.querySelectorAll("[data-i18n-placeholder]").forEach(el => {
+      const key = el.getAttribute("data-i18n-placeholder");
+      el.placeholder = translations[lang][key] || el.placeholder;
+    });
+  }
+
+  // ------------------------
+  // Theme Toggle
+  // ------------------------
+  function applyTheme(theme) {
+    document.body.classList.toggle("dark-theme", theme === "dark");
+    localStorage.setItem("anonChatTheme", theme);
+  }
+
+  // ------------------------
+  // JSON Utilities
+  // ------------------------
+  async function initJson(path, initial) {
+    try {
+      const head = await fetch(path, { method: "HEAD" });
+      if (head.ok) return;
+    } catch {}
+    await fetch(path, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(initial)
+    });
+  }
+  async function readJson(path) {
+    const res = await fetch(path);
+    if (!res.ok) throw new Error(`Cannot load ${path}`);
+    return res.json();
+  }
+  async function writeJson(path, data) {
+    await fetch(path, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data)
+    });
+  }
+
+  // ------------------------
+  // UUID v4
+  // ------------------------
+  function uuidv4() {
+    return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, c => {
+      const r = (Math.random() * 16) | 0;
+      const v = c === "x" ? r : (r & 0x3) | 0x8;
+      return v.toString(16);
+    });
+  }
+
+  // ------------------------
+  // PWA Service Worker
+  // ------------------------
+  function registerServiceWorker() {
+    if (!("serviceWorker" in navigator)) return;
+
+    const swCode = `
+      const CACHE = 'anonchat-v1';
+      const URLS = ['/', 'index.html', 'users.json', 'global.json', 'online.json'];
+      self.addEventListener('install', evt => {
+        evt.waitUntil(caches.open(CACHE).then(c => c.addAll(URLS)));
+      });
+      self.addEventListener('fetch', evt => {
+        evt.respondWith(
+          fetch(evt.request)
+            .then(resp => {
+              const copy = resp.clone();
+              caches.open(CACHE).then(c => c.put(evt.request, copy));
+              return resp;
+            })
+            .catch(() => caches.match(evt.request))
+        );
+      });
+    `;
+    const blob = new Blob([swCode], { type: "application/javascript" });
+    const swUrl = URL.createObjectURL(blob);
+
+    navigator.serviceWorker.register(swUrl).catch(() => {});
+  }
+
+  // ------------------------
+  // Application State
+  // ------------------------
+  let currentUser = null;
+  const pollers = {};
+  let globalMessages = [];
+  const pageSize = 50;
+  let currentPage = 1;
+
+  // ------------------------
+  // Initialization
+  // ------------------------
+  document.addEventListener("DOMContentLoaded", async () => {
+    // Language setup
+    const savedLang = localStorage.getItem("anonChatLang") || (navigator.language.startsWith("it") ? "it" : "en");
+    document.getElementById("lang-select").value = savedLang;
+    setLanguage(savedLang);
+    document.getElementById("lang-select").addEventListener("change", e => {
+      const l = e.target.value;
+      localStorage.setItem("anonChatLang", l);
+      setLanguage(l);
+    });
+
+    // Theme setup
+    const savedTheme = localStorage.getItem("anonChatTheme") || "light";
+    applyTheme(savedTheme);
+    document.getElementById("theme-toggle").addEventListener("click", () => {
+      applyTheme(document.body.classList.contains("dark-theme") ? "light" : "dark");
+    });
+
+    // JSON files init
+    await initJson("users.json", { users: [] });
+    await initJson("global.json", { messages: [] });
+    await initJson("online.json", { online: [] });
+
+    // Event listeners
+    document.getElementById("register-form").addEventListener("submit", onRegister);
+    document.getElementById("login-form").addEventListener("submit", onLogin);
+    document.getElementById("logout-btn").addEventListener("click", onLogout);
+    document.getElementById("global-form").addEventListener("submit", onGlobalSubmit);
+    document.getElementById("load-more").addEventListener("click", () => {
+      currentPage++;
+      renderGlobal();
+    });
+
+    // Auto-login
+    const saved = localStorage.getItem("anonChatUser");
+    if (saved) {
+      currentUser = JSON.parse(saved);
+      await addOnline();
+      enterChat();
+    }
+
+    // Register service worker
+    registerServiceWorker();
+  });
+
+  // ------------------------
+  // User Registration
+  // ------------------------
+  async function onRegister(e) {
+    e.preventDefault();
+    const nick = document.getElementById("reg-nick").value.trim();
+    const pass = document.getElementById("reg-pass").value;
+    const db = await readJson("users.json");
+    if (db.users.some(u => u.nickname === nick)) {
+      return alert("Nickname already taken");
+    }
+    const salt = await bcrypt.genSalt(10);
+    const hash = await bcrypt.hash(pass, salt);
+    const id = uuidv4();
+    db.users.push({ id, nickname: nick, passwordHash: hash });
+    await writeJson("users.json", db);
+    alert("Registered – please log in");
+    e.target.reset();
+  }
+
+  // ------------------------
+  // User Login
+  // ------------------------
+  async function onLogin(e) {
+    e.preventDefault();
+    const nick = document.getElementById("log-nick").value.trim();
+    const pass = document.getElementById("log-pass").value;
+    const db = await readJson("users.json");
+    const user = db.users.find(u => u.nickname === nick);
+    if (!user || !(await bcrypt.compare(pass, user.passwordHash))) {
+      return alert("Invalid credentials");
+    }
+    currentUser = user;
+    localStorage.setItem("anonChatUser", JSON.stringify(user));
+    await addOnline();
+    enterChat();
+  }
+
+  // ------------------------
+  // User Logout
+  // ------------------------
+  async function onLogout() {
+    await removeOnline();
+    localStorage.removeItem("anonChatUser");
+    location.reload();
+  }
+
+  // ------------------------
+  // Online Presence
+  // ------------------------
+  async function addOnline() {
+    const o = await readJson("online.json");
+    if (!o.online.includes(currentUser.id)) {
+      o.online.push(currentUser.id);
+      await writeJson("online.json", o);
+    }
+  }
+  async function removeOnline() {
+    const o = await readJson("online.json");
+    o.online = o.online.filter(id => id !== currentUser.id);
+    await writeJson("online.json", o);
+  }
+  async function pollOnline() {
+    const o = await readJson("online.json");
+    const db = await readJson("users.json");
+    const ul = document.getElementById("online-ul");
+    ul.innerHTML = "";
+    o.online.forEach(id => {
+      if (id === currentUser.id) return;
+      const u = db.users.find(x => x.id === id);
+      if (!u) return;
+      const li = document.createElement("li");
+      li.textContent = u.nickname;
+      li.dataset.id = id;
+      li.addEventListener("click", () => openPrivate(id, u.nickname));
+      ul.appendChild(li);
+    });
+  }
+
+  // ------------------------
+  // Global Chat & Pagination
+  // ------------------------
+  async function onGlobalSubmit(e) {
+    e.preventDefault();
+    const txt = document.getElementById("global-input").value.trim();
+    if (!txt) return;
+    const g = await readJson("global.json");
+    g.messages.push({
+      id: uuidv4(),
+      userId: currentUser.id,
+      nickname: currentUser.nickname,
+      text: txt,
+      timestamp: new Date().toISOString()
+    });
+    await writeJson("global.json", g);
+    e.target.reset();
+  }
+
+  async function pollGlobal() {
+    const g = await readJson("global.json");
+    globalMessages = g.messages;
+    renderGlobal();
+  }
+
+  function renderGlobal() {
+    const container = document.getElementById("global-messages");
+    const loadMoreBtn = document.getElementById("load-more");
+    const total = globalMessages.length;
+    const start = Math.max(0, total - pageSize * currentPage);
+    const slice = globalMessages.slice(start, total - pageSize * (currentPage - 1));
+    container.innerHTML = "";
+    slice.forEach(m => {
+      const div = document.createElement("div");
+      div.className = "msg";
+      div.innerHTML = `
+        <div class="meta">[${new Date(m.timestamp).toLocaleTimeString()}] <strong>${m.nickname}:</strong></div>
+        <div>${m.text}</div>`;
+      container.appendChild(div);
+    });
+    container.scrollTop = container.scrollHeight;
+    loadMoreBtn.classList.toggle("hidden", start === 0);
+  }
+
+  // ------------------------
+  // Private Chats
+  // ------------------------
+  function openPrivate(targetId, targetNick) {
+    const key = `pm-${targetId}`;
+    if (pollers[key]) return;
+    const panel = document.getElementById("private-chats");
+    const win = document.createElement("div");
+    win.className = "pm-window";
+    win.id = key;
+    win.innerHTML = `
+      <header>${targetNick}</header>
+      <div class="messages"></div>
+      <form><input type="text" placeholder="Private message..." required />
+      <button type="submit">Send</button></form>`;
+    panel.appendChild(win);
+
+    const myFile = `convs_${currentUser.id}.json`;
+    const theirFile = `convs_${targetId}.json`;
+
+    Promise.all([
+      initJson(myFile, { privateChats: {} }),
+      initJson(theirFile, { privateChats: {} })
+    ]).then(() => {
+      win.querySelector("form").addEventListener("submit", ev => {
+        ev.preventDefault();
+        const txt = win.querySelector("input").value.trim();
+        if (!txt) return;
+        sendPrivate(targetId, targetNick, txt);
+        win.querySelector("input").value = "";
+      });
+      pollers[key] = setInterval(() => renderPrivate(win, targetId), 1000);
+    });
+  }
+
+  async function renderPrivate(win, targetId) {
+    const data = await readJson(`convs_${currentUser.id}.json`);
+    const conv = data.privateChats[targetId] || [];
+    const box = win.querySelector(".messages");
+    box.innerHTML = "";
+    conv.forEach(m => {
+      const div = document.createElement("div");
+      div.className = "msg";
+      const who = m.from === currentUser.id ? "You" : m.nickname;
+      div.innerHTML = `
+        <div class="meta">[${new Date(m.timestamp).toLocaleTimeString()}] <strong>${who}:</strong></div>
+        <div>${m.text}</div>`;
+      box.appendChild(div);
+    });
+    box.scrollTop = box.scrollHeight;
+  }
+
+  async function sendPrivate(targetId, targetNick, text) {
+    const msg = {
+      id: uuidv4(),
+      from: currentUser.id,
+      to: targetId,
+      nickname: currentUser.nickname,
+      text,
+      timestamp: new Date().toISOString()
+    };
+    const [mine, theirs] = await Promise.all([
+      readJson(`convs_${currentUser.id}.json`),
+      readJson(`convs_${targetId}.json`)
+    ]);
+    mine.privateChats[targetId] = mine.privateChats[targetId] || [];
+    theirs.privateChats[currentUser.id] = theirs.privateChats[currentUser.id] || [];
+    mine.privateChats[targetId].push(msg);
+    theirs.privateChats[currentUser.id].push(msg);
+    await Promise.all([
+      writeJson(`convs_${currentUser.id}.json`, mine),
+      writeJson(`convs_${targetId}.json`, theirs)
+    ]);
+  }
+
+  // ------------------------
+  // Enter Chat & Start Polling
+  // ------------------------
+  function enterChat() {
+    document.getElementById("auth-container").classList.add("hidden");
+    document.getElementById("chat-container").classList.remove("hidden");
+    document.getElementById("nick-display").textContent = currentUser.nickname;
+    pollGlobal();
+    pollOnline();
+    pollers.global = setInterval(pollGlobal, 2000);
+    pollers.online = setInterval(pollOnline, 3000);
+  }
+  </script>
+</body>
+</html>
